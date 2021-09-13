@@ -1600,8 +1600,8 @@ public:
             double od_rec_tube = 0.050;     //[m] inner diameter
             double th_rec_tube = 0.005/2.0; //[m] tube thickness
 
-            double receiverHeight = 12;     //[m] Receiver opening height in meters
-            double receiverWidth = 14;      //[m] Reciever opening width in meters
+            double receiverHeight = 10;     //[m] Receiver opening height in meters
+            double receiverWidth = 10;      //[m] Reciever opening width in meters
             double topLipHeight = 1;        //[m] Height of top lip in meters
             double botLipHeight = 1;        //[m] Height of bottom lip in meters
             

@@ -197,7 +197,7 @@ public:
 
 	virtual double area_proj();
 
-    void tube_UA_and_deltaP(double m_dot_rec_total /*kg/s*/, const Eigen::MatrixXd E_T_HTF /*K*/,
+    void tube_UA_and_deltaP(std::vector<double> m_dot_paths /*kg/s*/, const Eigen::MatrixXd E_T_HTF /*K*/,
         Eigen::MatrixXd& UA, double& W_dot_pump /*MWe*/);
 
     void genOctCavity();
