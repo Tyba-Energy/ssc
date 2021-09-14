@@ -1236,16 +1236,16 @@ void C_cavity_receiver::viewFactor(const util::matrix_t<double>& poly_a, const u
             }
 
             // check for coincident vertices - nudge polygon B vertices if found
-            if (are_rows_equal(r_i, r_p, 0) || are_rows_equal(r_j, r_p, 0)) {
+            //if (are_rows_equal(r_i, r_p, 0) || are_rows_equal(r_j, r_p, 0)) {
                 for (size_t jj = 0; jj < r_p.ncols(); jj++) {
                     r_p(0, jj) += almostzero;
                 }
-            }
-            else if (are_rows_equal(r_i, r_q, 0) || are_rows_equal(r_j, r_q, 0)) {
+            //}
+            //else if (are_rows_equal(r_i, r_q, 0) || are_rows_equal(r_j, r_q, 0)) {
                 for (size_t jj = 0; jj < r_q.ncols(); jj++) {
                     r_q(0, jj) += almostzero;
                 }
-            }
+            //}
 
             // determine parameterized coordinates for each edge, and minimum
             // distance between edge rays(edges extended infinitely into space)
@@ -1281,7 +1281,7 @@ void C_cavity_receiver::viewFactor(const util::matrix_t<double>& poly_a, const u
                     + f_skew(s_i, l_p, alpha, cosAlpha, sinAlpha, dMin));
 
                 if (!isfinite(sumTerms(i, p))) {
-                    double abce = 123;
+                    throw(C_csp_exception("viewFactor skewTrue returned nan"));
                 }
             }
             else {  // alternate expression for when alpha approaches zero
@@ -1303,7 +1303,7 @@ void C_cavity_receiver::viewFactor(const util::matrix_t<double>& poly_a, const u
                     fParallel(s_i, l_q, dMin) - fParallel(s_j, l_p, dMin) + fParallel(s_i, l_p, dMin));
 
                 if (!isfinite(sumTerms(i, p))) {
-                    double abce = 123;
+                    throw(C_csp_exception("viewFactor skewFalse returned nan"));
                 }
             }
         }
@@ -1321,8 +1321,8 @@ void C_cavity_receiver::viewFactor(const util::matrix_t<double>& poly_a, const u
     F_AB = radUA / areaA;
     F_BA = radUA / areaB;
 
-    if (!isfinite(F_AB)) {
-        double abc = 1.23;
+    if (!isfinite(F_AB) || !isfinite(F_BA)) {
+        throw(C_csp_exception("viewFactor calculated view factor is nan"));
     }
 
     return;
@@ -2631,8 +2631,7 @@ void C_cavity_receiver::init()
     // ******************************************
     m_nPanels = 4;
     
-    //size_t pipeWindings = 5;    // round(receiverHeight / min(elemSizes))   // 1
-    m_pipeWindings = m_nPanels;   //[-]
+    m_pipeWindings = 4;   //[-] Probably needs to be >= 2 to avoid inconsistencies in mesh calcs
     m_modelRes = 1;               //[-] Value must be = 1 until/unless modelRes code imported from Matlab
     m_is_bottomUpFlow = true;
     m_is_centerOutFlow = true;
