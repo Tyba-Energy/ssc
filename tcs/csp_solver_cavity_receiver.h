@@ -78,6 +78,7 @@ private:
     size_t m_nPaths;        //[-]
     bool m_is_bottomUpFlow;     //[-]
     bool m_is_centerOutFlow;    //[-]
+    double m_offset;        //[m]
 
     double m_od_rec_tube;   //[m] single tube outer diameter
     double m_th_rec_tube;   //[m] single tube wall thickness

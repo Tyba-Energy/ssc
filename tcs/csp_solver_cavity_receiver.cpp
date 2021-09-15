@@ -160,12 +160,9 @@ void C_cavity_receiver::genOctCavity()
     }
     // *********************************************************
 
-    double offset = 0.0;    //[m]
-    //offset = -1.0;          //[m]
-
     double radius = m_receiverWidth/2.0;    //[m]
-    double span = CSP::pi + 2.0*asin(offset/radius);    //[rad]
-    double theta0 = -asin(offset/radius);   //[rad]
+    double span = CSP::pi + 2.0*asin(m_offset/radius);    //[rad]
+    double theta0 = -asin(m_offset/radius);   //[rad]
     double panelSpan = span / (double)m_nPanels;    //[rad]
 
     // matrix_t(nr, nc, val)
@@ -175,7 +172,7 @@ void C_cavity_receiver::genOctCavity()
 
     for (size_t i = 0; i < m_nPanels + 1; i++) {
         mv_rec_surfs[i_floor].vertices(i, 0) = mv_rec_surfs[i_cover].vertices(i, 0) = m_receiverWidth*cos(theta0 + i*panelSpan) / 2.0;
-        mv_rec_surfs[i_floor].vertices(i, 1) = mv_rec_surfs[i_cover].vertices(i, 1) = m_receiverWidth*sin(theta0 + i*panelSpan) / 2.0 + offset;
+        mv_rec_surfs[i_floor].vertices(i, 1) = mv_rec_surfs[i_cover].vertices(i, 1) = m_receiverWidth*sin(theta0 + i*panelSpan) / 2.0 + m_offset;
         mv_rec_surfs[i_floor].vertices(i, 2) = -m_receiverHeight / 2.0;
         mv_rec_surfs[i_cover].vertices(i, 2) = m_receiverHeight / 2.0;
     }
@@ -2451,13 +2448,14 @@ void C_cavity_receiver::init()
     // ******************************************
     // Set up cavity geometry and view factors
     // ******************************************
-    m_nPanels = 4;
+    m_nPanels = 6;
     
-    m_pipeWindings = 4;   //[-] Probably needs to be >= 2 to avoid inconsistencies in mesh calcs
+    m_pipeWindings = 2;   //[-] Probably needs to be >= 2 to avoid inconsistencies in mesh calcs
     m_modelRes = 1;               //[-] Value must be = 1 until/unless modelRes code imported from Matlab
     m_is_bottomUpFlow = true;
     m_is_centerOutFlow = true;
     m_nPaths = 2;
+    m_offset = 0;
 
     double surface_roughness = 4.5e-5;  //[m]
 
