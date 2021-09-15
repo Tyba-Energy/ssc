@@ -49,7 +49,6 @@ public:
         util::matrix_t<double> vertices;    // (nr, nc) -> (vertex index, dimension [m] (i.e. xyx))
         size_t type;                // mesh type: 0=triangle, 1=quad, 2=single element
         bool is_active_surf;        // True: active surface w/ HTF, False: passive surface no HTF
-        bool is_flipRoute;
         double eps_sol;             //[-]
         double eps_therm;           //[-]
         double surf_elem_size;      //[m]
@@ -57,22 +56,9 @@ public:
         C_rec_surface()
         {
             type = 10;
-            is_active_surf = is_flipRoute = false;
+            is_active_surf = false;
             eps_sol = eps_therm = surf_elem_size = std::numeric_limits<double>::quiet_NaN();
         }
-    };
-
-    enum surf_order
-    {
-        PANEL1,
-        PANEL2,
-        PANEL3,
-        PANEL4,
-        FLOOR,
-        COVER,
-        TOPLIP,
-        BOTLIP,
-        APERTURE
     };
 
 private:
@@ -207,8 +193,6 @@ public:
     void makeGlobalElems();
 
     void surfValuesToElems();
-
-    void zigzagRouting(size_t n_steps);
 
     void zigzagRouting();
 

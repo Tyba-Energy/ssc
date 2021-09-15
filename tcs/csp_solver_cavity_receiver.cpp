@@ -94,36 +94,56 @@ void C_cavity_receiver::genOctCavity()
     
     // Creates geometry (i.e. defines vertices) for a 4-panel half-octagonal cavity receiver
     // of specified width, height, and with or without upper and lower lips
-    mv_rec_surfs.resize(m_nPanels + 5);
+    bool is_top_lip = m_topLipHeight > 0.0;
+    bool is_bot_lip = m_botLipHeight > 0.0;
+    size_t top_lip_count = (is_top_lip) ? 1 : 0;
+    size_t bot_lip_count = (is_bot_lip) ? 1 : 0;
 
-    mv_rec_surfs[PANEL1].type = 0; // 1;
-    mv_rec_surfs[PANEL2].type = 0; // 1;
-    mv_rec_surfs[PANEL3].type = 0; // 1;
-    mv_rec_surfs[PANEL4].type = 0; // 1;
-    mv_rec_surfs[FLOOR].type = 3; // 2;
-    mv_rec_surfs[COVER].type = 3; // 2;
-    mv_rec_surfs[TOPLIP].type = 0; // 1;
-    mv_rec_surfs[BOTLIP].type = 0; // 1;
-    mv_rec_surfs[APERTURE].type = 3; // 2;
+    size_t n_modeled_surfs = m_nPanels + 3 + top_lip_count + bot_lip_count;
 
-    mv_rec_surfs[PANEL1].is_active_surf = true;
-    mv_rec_surfs[PANEL2].is_active_surf = true;
-    mv_rec_surfs[PANEL3].is_active_surf = true;
-    mv_rec_surfs[PANEL4].is_active_surf = true;
-    mv_rec_surfs[FLOOR].is_active_surf = false;
-    mv_rec_surfs[COVER].is_active_surf = false;
-    mv_rec_surfs[TOPLIP].is_active_surf = false;
-    mv_rec_surfs[BOTLIP].is_active_surf = false;
-    mv_rec_surfs[APERTURE].is_active_surf = false;
+    size_t i_floor = m_nPanels;
+    size_t i_cover = i_floor + 1;
+    size_t i_toplip = i_cover + top_lip_count;
+    size_t i_botlip = i_toplip + bot_lip_count;
+        // aperture must be final index in mv_rec_surfs to be compatible with VFMatrix method
+    size_t i_aperture = i_botlip + 1;
 
-    mv_rec_surfs[PANEL1].is_flipRoute = true;
-    mv_rec_surfs[PANEL2].is_flipRoute = false;
-    mv_rec_surfs[PANEL3].is_flipRoute = true;
-    mv_rec_surfs[PANEL4].is_flipRoute = false;
+    mv_rec_surfs.resize(n_modeled_surfs);
 
+    // Assign mesh types
+    for (size_t i = 0; i < m_nPanels; i++) {
+        mv_rec_surfs[i].type = 0;   // rectangular elements
+    }
+    mv_rec_surfs[i_floor].type = 3; // 2;
+    mv_rec_surfs[i_cover].type = 3; // 2;
+    if (is_top_lip) {
+        mv_rec_surfs[i_toplip].type = 0; // 1;
+    }
+    if (is_bot_lip) {
+        mv_rec_surfs[i_botlip].type = 0; // 1;
+    }
+    mv_rec_surfs[i_aperture].type = 3; // 2;
+    // *********************************************
+
+    // Assign active surface boolean
+    for (size_t i = 0; i < m_nPanels; i++) {
+        mv_rec_surfs[i].is_active_surf = true;
+    }
+    mv_rec_surfs[i_floor].is_active_surf = false;
+    mv_rec_surfs[i_cover].is_active_surf = false;
+    if (is_top_lip) {
+        mv_rec_surfs[i_toplip].is_active_surf = false;
+    }
+    if (is_bot_lip) {
+        mv_rec_surfs[i_botlip].is_active_surf = false;
+    }
+    mv_rec_surfs[i_aperture].is_active_surf = false;
+    // ************************************************
+
+    // Assign solar and thermal emissivities
     size_t n_surfs = mv_rec_surfs.size();
     for (size_t i = 0; i < n_surfs; i++) {
-        if (i == APERTURE) {
+        if (i == i_aperture) {
             mv_rec_surfs[i].eps_sol = 1.0;
             mv_rec_surfs[i].eps_therm = 1.0;
         }
@@ -138,128 +158,136 @@ void C_cavity_receiver::genOctCavity()
             }
         }
     }
+    // *********************************************************
 
-    // Polygon interior angle
-    // Assumes center of polygon is center of aperture
-    double theta = CSP::pi / (double)m_nPanels;   //[rad]
+    double offset = 0.0;    //[m]
+    //offset = -1.0;          //[m]
 
-    // Calculate element sizes for mesh based on dimensions and model resolution parameter
-    double panelWidth = 2.0*(m_receiverWidth/2.0)*sin(theta/2.0);    //[m]
-    mv_rec_surfs[PANEL1].surf_elem_size = panelWidth / (double)m_pipeWindings / (double)m_modelRes;
-    mv_rec_surfs[PANEL4].surf_elem_size = mv_rec_surfs[PANEL3].surf_elem_size = mv_rec_surfs[PANEL2].surf_elem_size = mv_rec_surfs[PANEL1].surf_elem_size;
-    mv_rec_surfs[FLOOR].surf_elem_size = mv_rec_surfs[COVER].surf_elem_size = m_receiverWidth / 4.0 / m_modelRes;
-    mv_rec_surfs[TOPLIP].surf_elem_size = mv_rec_surfs[BOTLIP].surf_elem_size = m_receiverWidth / 6.0 / m_modelRes;
+    double radius = m_receiverWidth/2.0;    //[m]
+    double span = CSP::pi + 2.0*asin(offset/radius);    //[rad]
+    double theta0 = -asin(offset/radius);   //[rad]
+    double panelSpan = span / (double)m_nPanels;    //[rad]
 
     // matrix_t(nr, nc, val)
     // (x, y, z)
-    mv_rec_surfs[FLOOR].vertices.resize_fill(m_nPanels + 1, 3, 0.0);
-    mv_rec_surfs[COVER].vertices.resize_fill(m_nPanels + 1, 3, 0.0);
+    mv_rec_surfs[i_floor].vertices.resize_fill(m_nPanels + 1, 3, 0.0);
+    mv_rec_surfs[i_cover].vertices.resize_fill(m_nPanels + 1, 3, 0.0);
 
-    for (size_t i = 0; i < m_nPanels+1; i++) {
-        mv_rec_surfs[FLOOR].vertices(i, 0) = mv_rec_surfs[COVER].vertices(i, 0) = m_receiverWidth * cos(i * theta)/2.0;
-        mv_rec_surfs[FLOOR].vertices(i, 1) = mv_rec_surfs[COVER].vertices(i, 1) = m_receiverWidth * sin(i * theta)/2.0;
-        mv_rec_surfs[FLOOR].vertices(i, 2) = -m_receiverHeight / 2.0;
-        mv_rec_surfs[COVER].vertices(i, 2) = m_receiverHeight / 2.0;
+    for (size_t i = 0; i < m_nPanels + 1; i++) {
+        mv_rec_surfs[i_floor].vertices(i, 0) = mv_rec_surfs[i_cover].vertices(i, 0) = m_receiverWidth*cos(theta0 + i*panelSpan) / 2.0;
+        mv_rec_surfs[i_floor].vertices(i, 1) = mv_rec_surfs[i_cover].vertices(i, 1) = m_receiverWidth*sin(theta0 + i*panelSpan) / 2.0 + offset;
+        mv_rec_surfs[i_floor].vertices(i, 2) = -m_receiverHeight / 2.0;
+        mv_rec_surfs[i_cover].vertices(i, 2) = m_receiverHeight / 2.0;
     }
+
+    util::matrix_t<double> panel_side_vector;
+    diffrows(mv_rec_surfs[i_floor].vertices.row(0), mv_rec_surfs[i_floor].vertices.row(1), panel_side_vector);
+    double panel_width = mag_vect(panel_side_vector);
 
     util::matrix_t<double> temp_total(4, 3, std::numeric_limits<double>::quiet_NaN());
     util::matrix_t<double> temp_p1(4, 3, std::numeric_limits<double>::quiet_NaN());
 
     for (size_t n = 0; n < m_nPanels; n++) {
-        temp_p1 = mv_rec_surfs[FLOOR].vertices.row(n);
+        temp_p1 = mv_rec_surfs[i_floor].vertices.row(n);
         for (size_t i = 0; i < temp_p1.length(); i++) {
             temp_total(0, i) = temp_p1(0, i);
         }
-        temp_p1 = mv_rec_surfs[COVER].vertices.row(n);
+        temp_p1 = mv_rec_surfs[i_cover].vertices.row(n);
         for (size_t i = 0; i < temp_p1.length(); i++) {
             temp_total(1, i) = temp_p1(0, i);
         }
-        temp_p1 = mv_rec_surfs[COVER].vertices.row(n + 1);
+        temp_p1 = mv_rec_surfs[i_cover].vertices.row(n + 1);
         for (size_t i = 0; i < temp_p1.length(); i++) {
             temp_total(2, i) = temp_p1(0, i);
         }
-        temp_p1 = mv_rec_surfs[FLOOR].vertices.row(n + 1);
+        temp_p1 = mv_rec_surfs[i_floor].vertices.row(n + 1);
         for (size_t i = 0; i < temp_p1.length(); i++) {
             temp_total(3, i) = temp_p1(0, i);
         }
-        if (n == 0) {
-            mv_rec_surfs[PANEL1].vertices = temp_total;
-        }
-        else if (n == 1) {
-            mv_rec_surfs[PANEL2].vertices = temp_total;
-        }
-        else if (n == 2) {
-            mv_rec_surfs[PANEL3].vertices = temp_total;
-        }
-        else if (n == 3) {
-            mv_rec_surfs[PANEL4].vertices = temp_total;
-        }
+        mv_rec_surfs[n].vertices = temp_total;
     }
 
-    mv_rec_surfs[APERTURE].vertices.resize_fill(4, 3, std::numeric_limits<double>::quiet_NaN());
-    mv_rec_surfs[TOPLIP].vertices.resize_fill(4, 3, std::numeric_limits<double>::quiet_NaN());
-    mv_rec_surfs[BOTLIP].vertices.resize_fill(4, 3, std::numeric_limits<double>::quiet_NaN());
+    mv_rec_surfs[i_aperture].vertices.resize_fill(4, 3, std::numeric_limits<double>::quiet_NaN());
 
-    if (m_topLipHeight <= 0.0) {
-        temp_p1 = mv_rec_surfs[COVER].vertices.row(0);
+    if (!is_top_lip) {
+        temp_p1 = mv_rec_surfs[i_cover].vertices.row(0);
         for (size_t i = 0; i < temp_p1.length(); i++) {
-            mv_rec_surfs[APERTURE].vertices(0, i) = temp_p1(0, i);
+            mv_rec_surfs[i_aperture].vertices(0, i) = temp_p1(0, i);
         }
-        temp_p1 = mv_rec_surfs[COVER].vertices.row(m_nPanels);
+        temp_p1 = mv_rec_surfs[i_cover].vertices.row(m_nPanels);
         for (size_t i = 0; i < temp_p1.length(); i++) {
-            mv_rec_surfs[APERTURE].vertices(1, i) = temp_p1(0, i);
+            mv_rec_surfs[i_aperture].vertices(1, i) = temp_p1(0, i);
         }
     }
     else {
+        mv_rec_surfs[i_toplip].vertices.resize_fill(4, 3, std::numeric_limits<double>::quiet_NaN());
+
         util::matrix_t<double> temp_a(2, 3, std::numeric_limits<double>::quiet_NaN());
         for (size_t j = 0; j < 3; j++) {
-            mv_rec_surfs[TOPLIP].vertices(0,j) = mv_rec_surfs[COVER].vertices(0,j);
-            mv_rec_surfs[TOPLIP].vertices(1,j) = mv_rec_surfs[COVER].vertices(mv_rec_surfs[COVER].vertices.nrows()-1,j);
+            mv_rec_surfs[i_toplip].vertices(0, j) = mv_rec_surfs[i_cover].vertices(0, j);
+            mv_rec_surfs[i_toplip].vertices(1, j) = mv_rec_surfs[i_cover].vertices(mv_rec_surfs[i_cover].vertices.nrows() - 1, j);
         }
         for (size_t i = 0; i < 2; i++) {
-            temp_a(i, 0) = mv_rec_surfs[TOPLIP].vertices(i, 0);
-            temp_a(i, 1) = mv_rec_surfs[TOPLIP].vertices(i, 1);
-            temp_a(i, 2) = mv_rec_surfs[TOPLIP].vertices(i, 2) - m_topLipHeight;
+            temp_a(i, 0) = mv_rec_surfs[i_toplip].vertices(i, 0);
+            temp_a(i, 1) = mv_rec_surfs[i_toplip].vertices(i, 1);
+            temp_a(i, 2) = mv_rec_surfs[i_toplip].vertices(i, 2) - m_topLipHeight;
         }
         util::matrix_t<double> temp_b;
         flipup(temp_a, temp_b);
         for (size_t j = 0; j < 3; j++) {
-            mv_rec_surfs[TOPLIP].vertices(2,j) = temp_b(0,j);
-            mv_rec_surfs[TOPLIP].vertices(3,j) = temp_b(1,j);
-            mv_rec_surfs[APERTURE].vertices(0,j) = mv_rec_surfs[TOPLIP].vertices(3,j);
-            mv_rec_surfs[APERTURE].vertices(1,j) = mv_rec_surfs[TOPLIP].vertices(2,j);
+            mv_rec_surfs[i_toplip].vertices(2, j) = temp_b(0, j);
+            mv_rec_surfs[i_toplip].vertices(3, j) = temp_b(1, j);
+            mv_rec_surfs[i_aperture].vertices(0, j) = mv_rec_surfs[i_toplip].vertices(3, j);
+            mv_rec_surfs[i_aperture].vertices(1, j) = mv_rec_surfs[i_toplip].vertices(2, j);
         }
     }
 
-    if (m_botLipHeight <= 0.0) {
-        temp_p1 = mv_rec_surfs[FLOOR].vertices.row(m_nPanels);
+    if (!is_bot_lip) {
+        temp_p1 = mv_rec_surfs[i_floor].vertices.row(m_nPanels);
         for (size_t i = 0; i < temp_p1.length(); i++) {
-            mv_rec_surfs[APERTURE].vertices(2, i) = temp_p1(0, i);
+            mv_rec_surfs[i_aperture].vertices(2, i) = temp_p1(0, i);
         }
-        temp_p1 = mv_rec_surfs[FLOOR].vertices.row(0);
+        temp_p1 = mv_rec_surfs[i_floor].vertices.row(0);
         for (size_t i = 0; i < temp_p1.length(); i++) {
-            mv_rec_surfs[APERTURE].vertices(3, i) = temp_p1(0, i);
+            mv_rec_surfs[i_aperture].vertices(3, i) = temp_p1(0, i);
         }
     }
     else {
-        util::matrix_t<double> temp_a(2,3,std::numeric_limits<double>::quiet_NaN());
+        mv_rec_surfs[i_botlip].vertices.resize_fill(4, 3, std::numeric_limits<double>::quiet_NaN());
+
+        util::matrix_t<double> temp_a(2, 3, std::numeric_limits<double>::quiet_NaN());
         for (size_t j = 0; j < 3; j++) {
-            mv_rec_surfs[BOTLIP].vertices(0,j) = mv_rec_surfs[FLOOR].vertices(0,j);
-            mv_rec_surfs[BOTLIP].vertices(1,j) = mv_rec_surfs[FLOOR].vertices(mv_rec_surfs[FLOOR].vertices.nrows()-1,j);
+            mv_rec_surfs[i_botlip].vertices(0, j) = mv_rec_surfs[i_floor].vertices(0, j);
+            mv_rec_surfs[i_botlip].vertices(1, j) = mv_rec_surfs[i_floor].vertices(mv_rec_surfs[i_floor].vertices.nrows() - 1, j);
         }
         for (size_t i = 0; i < 2; i++) {
-            temp_a(i,0) = mv_rec_surfs[BOTLIP].vertices(i,0);
-            temp_a(i,1) = mv_rec_surfs[BOTLIP].vertices(i,1);
-            temp_a(i,2) = mv_rec_surfs[BOTLIP].vertices(i,2) + m_botLipHeight;
+            temp_a(i, 0) = mv_rec_surfs[i_botlip].vertices(i, 0);
+            temp_a(i, 1) = mv_rec_surfs[i_botlip].vertices(i, 1);
+            temp_a(i, 2) = mv_rec_surfs[i_botlip].vertices(i, 2) + m_botLipHeight;
         }
         util::matrix_t<double> temp_b;
         flipup(temp_a, temp_b);
         for (size_t j = 0; j < 3; j++) {
-            mv_rec_surfs[BOTLIP].vertices(2,j) = temp_b(0,j);
-            mv_rec_surfs[BOTLIP].vertices(3,j) = temp_b(1,j);
-            mv_rec_surfs[APERTURE].vertices(2,j) = mv_rec_surfs[BOTLIP].vertices(2,j);
-            mv_rec_surfs[APERTURE].vertices(3,j) = mv_rec_surfs[BOTLIP].vertices(3,j);
+            mv_rec_surfs[i_botlip].vertices(2, j) = temp_b(0, j);
+            mv_rec_surfs[i_botlip].vertices(3, j) = temp_b(1, j);
+            mv_rec_surfs[i_aperture].vertices(2, j) = mv_rec_surfs[i_botlip].vertices(2, j);
+            mv_rec_surfs[i_aperture].vertices(3, j) = mv_rec_surfs[i_botlip].vertices(3, j);
         }
+    }
+
+    // Calculate element sizes for mesh based on dimensions and model resolution parameter
+    for (size_t i = 0; i < m_nPanels; i++) {
+        mv_rec_surfs[i].surf_elem_size = panel_width / (double)m_pipeWindings / (double)m_modelRes;
+    }
+    mv_rec_surfs[i_floor].surf_elem_size = mv_rec_surfs[i_cover].surf_elem_size = m_receiverWidth / 4.0 / m_modelRes;
+
+    double lip_elem_size = m_receiverWidth / 6.0 / m_modelRes;
+    if (is_top_lip) {
+        mv_rec_surfs[i_toplip].surf_elem_size = lip_elem_size;
+    }
+
+    if (is_bot_lip) {
+        mv_rec_surfs[i_botlip].surf_elem_size = lip_elem_size;
     }
 
     return;
@@ -822,212 +850,6 @@ Eigen::MatrixXd C_cavity_receiver::nearest(const Eigen::MatrixXd cents, const Ei
     }
 
     return cents.row(i_min);
-}
-
-void C_cavity_receiver::zigzagRouting(size_t n_steps)
-{
-    double tol = 0.05;      //[-] fraction of receiver height
-    int maxDim = m_centroids.nrows();
-
-    int n_surf_all = mv_rec_surfs.size();
-    int n_active = 0;
-    for (size_t i = 0; i < n_surf_all; i++) {
-        if (mv_rec_surfs[i].is_active_surf) {
-            n_active++;
-        }
-    }
-
-    // resize Fluid Connectivity Array
-    m_FCA.resize(n_active);
-
-    size_t maxRow = 0;
-    size_t maxCol = 0;
-
-    for (size_t i_surf = 0; i_surf < n_active; i_surf++) {
-
-        size_t nElems = m_surfIDs[i_surf].nrows();
-
-        util::matrix_t<int> FCM(nElems, nElems, -1);
-        util::matrix_t<double> cents(nElems, 3, std::numeric_limits<double>::quiet_NaN());
-
-        for (size_t i = 0; i < nElems; i++) {
-            for (size_t j = 0; j < 3; j++) {
-                cents(i,j) = m_centroids(m_surfIDs[i_surf][i],j);
-            }
-        }
-
-        int count = -1;
-
-        // translate elements to 2D domain
-        util::matrix_t<double> panelXaxis;
-        diffrows(cents.row(1), cents.row(0), panelXaxis);
-        util::matrix_t<double> diff1;
-        diffrows(cents.row(cents.nrows()-1), cents.row(0), diff1);
-        util::matrix_t<double> panelNorm;
-        crossproduct(panelXaxis, diff1, panelNorm);
-
-        util::matrix_t<double> cents2D, temp;
-        to2D(cents, cents.row(0), panelNorm, panelXaxis, cents2D, temp);
-
-
-        // determine step heights - this could be done better
-        double min_cent = min_column_val(cents2D, 1);
-        double max_cent = max_column_val(cents2D, 1);
-        double delta_cent = (max_cent - min_cent) / (double)(n_steps-1);
-        util::matrix_t<double> steps(n_steps, 1, std::numeric_limits<double>::quiet_NaN());
-        for (size_t i = 0; i < n_steps; i++) {
-            steps(i,0) = min_cent + delta_cent*i;
-        }
-
-        // Sort elements by the step to which they are closest
-        util::matrix_t<int> elemStep(nElems, 1, 0);
-        int i_min;
-        double minval, ival;
-        for (size_t j = 0; j < nElems; j++) {
-            i_min = 0;
-            minval = abs(cents2D(j,1) - steps(i_min,0));
-            for (size_t i = 1; i < n_steps; i++) {
-                ival = abs(cents2D(j, 1) - steps(i, 0));
-                if (ival < minval) {
-                    minval = ival;
-                    i_min = i;
-                }
-            }
-            elemStep(j,0) = i_min;
-        }
-
-        // Loop through each step
-        for (int j_step = n_steps - 1; j_step >= 0; j_step--) {
-
-            std::vector<int> elem_rows;
-            for (size_t i = 0; i < nElems; i++) {
-                if (elemStep(i, 0) == j_step) {
-                    elem_rows.push_back(i);
-                }
-            }
-
-            int n_er = elem_rows.size();
-            if (n_er > 0) {
-                util::matrix_t<double> centsStep(n_er, 2, std::numeric_limits<double>::quiet_NaN());
-                util::matrix_t<int> elemIDsStep(n_er, 1, -1);
-
-                for (size_t i = 0; i < n_er; i++) {
-                    for (size_t j = 0; j < 2; j++) {
-                        centsStep(i,j) = cents2D(elem_rows[i],j);
-                        elemIDsStep(i,0) = m_surfIDs[i_surf](elem_rows[i],0);
-                    }
-                }
-
-                // Determine number of columns and their locations
-                std::vector<double> v_width(n_er);
-                for (size_t i = 0; i < n_er; i++) {
-                    v_width[i] = centsStep(i,0);
-                }
-
-                std::vector<double>::iterator last = std::unique(v_width.begin(), v_width.end());
-                v_width.erase(last, v_width.end());
-                std::sort(v_width.begin(), v_width.end());
-                last = std::unique(v_width.begin(), v_width.end());
-                v_width.erase(last, v_width.end());
-
-                int columns = v_width.size();
-                util::matrix_t<double> width(columns, 1);
-                for (size_t i = 0; i < columns; i++) {
-                    width(i,0) = v_width[i];
-                }
-
-                util::matrix_t<double> width_copy = width;
-                if (mv_rec_surfs[i_surf].is_flipRoute) {
-                    if (j_step % 2 == 1) { // alternates flow direction for each step
-                        flipup(width_copy, width);
-                    }
-                }
-                else {
-                    if ((j_step + 1) % 2 == 1) {
-                        flipup(width_copy, width);
-                    }
-                }
-                
-                for (size_t k = 0; k < columns; k++) {
-                    std::vector<bool> test(n_er);
-                    bool is_any_true = false;
-                    for (size_t i = 0; i < n_er; i++) {
-                        test[i] = abs(centsStep(i,0)-width(k,0)) < tol;
-                        if (test[i]) {
-                            is_any_true = true;
-                        }
-                    }
-
-                    if (is_any_true) {
-                        count++;
-                    }
-
-                    int n_test = test.size();
-
-                    if (n_test > 0) {
-                        std::vector<int> elemGroup;
-                        for (size_t i = 0; i < n_test; i++) {
-                            if (test[i]) {
-                                elemGroup.push_back(elemIDsStep[i]);
-                            }
-                        }
-
-                        if (elemGroup.size() > maxCol) {
-                            maxCol = elemGroup.size();
-                        }
-                        
-                        for (size_t j = 0; j < elemGroup.size(); j++) {
-                            FCM(count,j) = elemGroup[j];
-                        }
-                    }
-                }
-            }
-        }
-
-        if (count > maxRow) {
-            maxRow = count;
-        }
-
-        m_FCA[i_surf] = FCM;
-
-        size_t j_col_nonzero = 0;
-        size_t n_rows = m_FCA[i_surf].nrows();
-
-        for (size_t j = 1; j < m_FCA[i_surf].ncols(); j++) {
-            bool is_non_zero = false;
-            for (size_t i = 0; i < n_rows; i++) {
-                if (m_FCA[i_surf](i, j) > -1) {
-                    is_non_zero = true;
-                    j_col_nonzero = j;
-                    break;
-                }
-            }
-            if (!is_non_zero) {
-                break;
-            }
-        }
-
-        size_t i_row_nonzero = 0;
-        size_t n_cols = m_FCA[i_surf].ncols();
-
-        for (size_t i = 1; i < n_rows; i++) {
-            bool is_non_zero = false;
-            for (size_t j = 0; j < n_cols; j++) {
-                if (m_FCA[i_surf](i, j) > -1) {
-                    is_non_zero = true;
-                    i_row_nonzero = i;
-                    break;
-                }
-            }
-            if (!is_non_zero) {
-                break;
-            }
-        }
-
-        m_FCA[i_surf].resize_preserve(i_row_nonzero + 1, j_col_nonzero + 1, -1);
-    }
-
-    return;
 }
 
 void C_cavity_receiver::VFMatrix()
