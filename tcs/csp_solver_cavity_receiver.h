@@ -209,6 +209,9 @@ public:
     void eigen_to_matrixt(const Eigen::MatrixXd& eigenx,
         util::matrix_t<double>& matrixt);
 
+    void eigen_to_matrixt(const Eigen::MatrixXi& eigenx,
+        util::matrix_t<int>& matrixt);
+
     Eigen::MatrixXd furthest(const Eigen::MatrixXd cents, const Eigen::MatrixXd aimpoint);
 
     Eigen::MatrixXd nearest(const Eigen::MatrixXd cents, const Eigen::MatrixXd aimpoint);
@@ -235,7 +238,8 @@ public:
 
     void meshPolygon(const util::matrix_t<double>& poly, double elemSize);
 
-    void meshHalfNgon(const util::matrix_t<double>& poly, double elemSize);
+    void meshHalfNgon(const util::matrix_t<double>& poly, double elemSize,
+        util::matrix_t<double>& nodes, util::matrix_t<int>& quads);
 
     void crossproduct(const util::matrix_t<double>&, const util::matrix_t<double>&, util::matrix_t<double>& cross);
 

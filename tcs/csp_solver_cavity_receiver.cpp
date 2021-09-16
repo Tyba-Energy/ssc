@@ -114,8 +114,8 @@ void C_cavity_receiver::genOctCavity()
     for (size_t i = 0; i < m_nPanels; i++) {
         mv_rec_surfs[i].type = 0;   // rectangular elements
     }
-    mv_rec_surfs[i_floor].type = 1; // 3;
-    mv_rec_surfs[i_cover].type = 3; //
+    mv_rec_surfs[i_floor].type = 3; // 1; // 3;
+    mv_rec_surfs[i_cover].type = 3; // 1; //
     if (is_top_lip) {
         mv_rec_surfs[i_toplip].type = 0;
     }
@@ -329,8 +329,8 @@ void C_cavity_receiver::meshGeometry()
             }
             else if (type == 1) {
                 // Mesh with triangles: meshHalfNgon method
-                meshHalfNgon(surf, mv_rec_surfs[i].surf_elem_size);
-                throw(C_csp_exception("Triangle mesh method meshHalfNgon not currently supported"));
+                meshHalfNgon(surf, mv_rec_surfs[i].surf_elem_size, nodes, elems);
+                v_nodes.push_back(nodes);
             }
             else if (type == 2) {
                 // Mesh with triangles: meshPolygon method
@@ -413,7 +413,31 @@ void C_cavity_receiver::makeGlobalElems()
         if (std::isfinite(mv_rec_surfs[i_surf].vertices(0, 0))) {
 
             if (type(i_surf, 0) == 3) {
-                throw(C_csp_exception("makeGlobalElems: Triangle meshes not currently supported"));
+
+                for (size_t i = 0; i < m_v_elems[i_surf].nrows(); i++) {
+                    for (size_t j = 0; j < m_v_elems[i_surf].ncols(); j++) {
+                        m_elements(m_surfIDs[i_surf](i, 0), j) = m_v_elems[i_surf](i, j);
+                    }
+                }
+
+                util::matrix_t<double> diff1, diff2, cross;
+                double vecnorm;
+                for (size_t i = 0; i < m_v_elems[i_surf].nrows(); i++) {
+                    diffrows(m_nodesGlobal.row(m_v_elems[i_surf](i, 1)), m_nodesGlobal.row(m_v_elems[i_surf](i, 0)), diff1);
+                    diffrows(m_nodesGlobal.row(m_v_elems[i_surf](i, 2)), m_nodesGlobal.row(m_v_elems[i_surf](i, 0)), diff2);
+                    crossproduct(diff1, diff2, cross);
+                    m_areas(m_surfIDs[i_surf](i, 0), 0) = mag_vect(cross) / 2.0;
+                }
+
+                for (size_t i = 0; i < m_v_elems[i_surf].nrows(); i++) {
+                    for (size_t j = 0; j < 3; j++) {
+                        m_centroids(m_surfIDs[i_surf](i, 0), j) = 0.0;
+                        for (size_t k = 0; k < 3; k++) {
+                            m_centroids(m_surfIDs[i_surf](i, 0), j) += m_nodesGlobal(m_v_elems[i_surf](i, k), j);
+                        }
+                        m_centroids(m_surfIDs[i_surf](i, 0), j) /= 3.0;
+                    }
+                }
             }
             else if (type(i_surf, 0) == 4) {
 
@@ -980,6 +1004,19 @@ void C_cavity_receiver::eigen_to_matrixt(const Eigen::MatrixXd& eigenx,
     }
 }
 
+void C_cavity_receiver::eigen_to_matrixt(const Eigen::MatrixXi& eigenx,
+    util::matrix_t<int>& matrixt)
+{
+    size_t nrows = eigenx.rows();
+    size_t ncols = eigenx.cols();
+    matrixt.resize(eigenx.rows(), eigenx.cols());
+    for (size_t i = 0; i < nrows; i++) {
+        for (size_t j = 0; j < ncols; j++) {
+            matrixt(i, j) = eigenx(i, j);
+        }
+    }
+}
+
 void C_cavity_receiver::hbarCorrelation(const Eigen::MatrixXd& T, double T_amb /*K*/, Eigen::MatrixXd& h /*W/m2-K*/)
 {
     double A_total = mE_areas.sum() - mE_areas(mE_areas.rows()-1,0);
@@ -1387,7 +1424,8 @@ void C_cavity_receiver::polygon_normal_and_area(const util::matrix_t<double>& po
     }
 }
 
-void C_cavity_receiver::meshHalfNgon(const util::matrix_t<double>& poly, double elemSize) {
+void C_cavity_receiver::meshHalfNgon(const util::matrix_t<double>& poly, double elemSize,
+    util::matrix_t<double>& mt_nodes, util::matrix_t<int>& mt_tris) {
 
     double tol_local = 1.E-7;
 
@@ -1459,13 +1497,152 @@ void C_cavity_receiver::meshHalfNgon(const util::matrix_t<double>& poly, double 
         nodesGlobal.row(i+1) = E_poly.row(i);
     }
 
-    Eigen::MatrixXd triangles = Eigen::MatrixXd::Zero(nElements, 3);
+    //Eigen::MatrixXd triangles = Eigen::MatrixXd::Zero(nElements, 3);
+    Eigen::MatrixXi triangles = Eigen::MatrixXi::Zero(nElements, 3);
 
     for (size_t i = 0; i < nwedges; i++) {
         triangles.row(i) << 0, i + 1, i + 2;
     }
 
     size_t triCount = nwedges;
+
+
+    for (size_t j = 1; j < divs; j++) {
+        for (size_t i = 0; i < triCount; i++) {
+
+            Eigen::MatrixXd nodes;
+
+            for (size_t m = 0; m < nodesGlobal.rows(); m++) {
+
+                size_t m_n_nodes = nodes.rows();
+                bool keep_row = true;
+                for (size_t n = 0; n < nodesGlobal.cols(); n++) {
+
+                    if (!std::isfinite(nodesGlobal(m, n))) {
+                        keep_row = false;
+                    }
+                }
+                if (keep_row) {
+
+                    if (m_n_nodes == 0) {
+                        nodes = nodesGlobal.row(m);
+                    }
+                    else {
+                        nodes.conservativeResize(m_n_nodes + 1, Eigen::NoChange);
+                        nodes.row(m_n_nodes) = nodesGlobal.row(m);
+                    }
+                }
+            }
+
+            size_t node1_ID = triangles(i,0);
+            size_t node2_ID = triangles(i,1);
+            size_t node3_ID = triangles(i,2);
+
+            Eigen::ArrayXd node1 = nodes.row(node1_ID);
+            Eigen::ArrayXd node2 = nodes.row(node2_ID);
+            Eigen::ArrayXd node3 = nodes.row(node3_ID);
+
+            Eigen::ArrayXd node4 = (node1 + node2).array()/2.0;
+            Eigen::ArrayXd node5 = (node2 + node3).array()/2.0;
+            Eigen::ArrayXd node6 = (node3 + node1).array()/2.0;
+
+            // Check for duplicated nodes
+            size_t newNodes = 0;
+
+            std::vector<bool> test4;
+            for (size_t m = 0; m < nodes.rows(); m++) {
+                test4.push_back( (bool)((Eigen::ArrayXd(nodes.row(m).array()) - node4).array().abs() < tol_local).all() );
+            }
+
+            size_t node4_ID = 0;
+            if (std::any_of(test4.begin(), test4.end(), [](bool y) { return y; })) {
+                std::vector<bool>::iterator it = std::find(test4.begin(), test4.end(), true);
+                node4_ID = it - test4.begin();
+            }
+            else {
+                newNodes++;
+                node4_ID = nodes.rows() - 1 + newNodes;
+                nodesGlobal.row(node4_ID) = node4;
+            }
+
+            std::vector<bool> test5;
+            for (size_t m = 0; m < nodes.rows(); m++) {
+                test5.push_back((bool)((Eigen::ArrayXd(nodes.row(m).array()) - node5).array().abs() < tol_local).all());
+            }
+
+            size_t node5_ID = 0;
+            if (std::any_of(test5.begin(), test5.end(), [](bool y) { return y; })) {
+                std::vector<bool>::iterator it = std::find(test5.begin(), test5.end(), true);
+                node5_ID = it - test5.begin();
+            }
+            else {
+                newNodes++;
+                node5_ID = nodes.rows() - 1 + newNodes;
+                nodesGlobal.row(node5_ID) = node5;
+            }
+
+            std::vector<bool> test6;
+            for (size_t m = 0; m < nodes.rows(); m++) {
+                test6.push_back((bool)((Eigen::ArrayXd(nodes.row(m).array()) - node6).array().abs() < tol_local).all());
+            }
+
+            size_t node6_ID = 0;
+            if (std::any_of(test6.begin(), test6.end(), [](bool y) { return y; })) {
+                std::vector<bool>::iterator it = std::find(test6.begin(), test6.end(), true);
+                node6_ID = it - test6.begin();
+            }
+            else {
+                newNodes++;
+                node6_ID = nodes.rows() - 1 + newNodes;
+                nodesGlobal.row(node6_ID) = node6;
+            }
+
+            // Assign nodes to new triangles
+            Eigen::MatrixXi tri1(1, 3);
+            tri1 << node1_ID, node4_ID, node6_ID;
+            Eigen::MatrixXi tri2(1, 3);
+            tri2 << node4_ID, node2_ID, node5_ID;
+            Eigen::MatrixXi tri3(1, 3);
+            tri3 << node6_ID, node5_ID, node3_ID;
+            Eigen::MatrixXi tri4(1, 3);
+            tri4 << node4_ID, node5_ID, node6_ID;
+
+            // Store triangles in global array
+            triangles.row(i) = tri1;
+            triangles.row(triCount-1 + 3*(i+1)) = tri2;
+            triangles.row(triCount-1 + 3*(i+1) - 1) = tri3;
+            triangles.row(triCount-1 + 3*(i+1) - 2) = tri4;
+        }
+
+        triCount = triCount*4;
+    }
+
+    Eigen::MatrixXd nodes;
+
+    for (size_t m = 0; m < nodesGlobal.rows(); m++) {
+
+        size_t m_n_nodes = nodes.rows();
+        bool keep_row = true;
+        for (size_t n = 0; n < nodesGlobal.cols(); n++) {
+
+            if (!std::isfinite(nodesGlobal(m, n))) {
+                keep_row = false;
+            }
+        }
+        if (keep_row) {
+
+            if (m_n_nodes == 0) {
+                nodes = nodesGlobal.row(m);
+            }
+            else {
+                nodes.conservativeResize(m_n_nodes + 1, Eigen::NoChange);
+                nodes.row(m_n_nodes) = nodesGlobal.row(m);
+            }
+        }
+    }
+
+    eigen_to_matrixt(nodes, mt_nodes);
+    eigen_to_matrixt(triangles, mt_tris);
 }
 
 void C_cavity_receiver::meshPolygon(const util::matrix_t<double>& poly, double elemSize)
