@@ -235,6 +235,8 @@ public:
 
     void meshPolygon(const util::matrix_t<double>& poly, double elemSize);
 
+    void meshHalfNgon(const util::matrix_t<double>& poly, double elemSize);
+
     void crossproduct(const util::matrix_t<double>&, const util::matrix_t<double>&, util::matrix_t<double>& cross);
 
     void norm3Dvect(const util::matrix_t<double>&, util::matrix_t<double>& norm_vect);

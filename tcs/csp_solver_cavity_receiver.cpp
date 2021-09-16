@@ -114,15 +114,15 @@ void C_cavity_receiver::genOctCavity()
     for (size_t i = 0; i < m_nPanels; i++) {
         mv_rec_surfs[i].type = 0;   // rectangular elements
     }
-    mv_rec_surfs[i_floor].type = 3; // 2;
-    mv_rec_surfs[i_cover].type = 3; // 2;
+    mv_rec_surfs[i_floor].type = 1; // 3;
+    mv_rec_surfs[i_cover].type = 3; //
     if (is_top_lip) {
-        mv_rec_surfs[i_toplip].type = 0; // 1;
+        mv_rec_surfs[i_toplip].type = 0;
     }
     if (is_bot_lip) {
-        mv_rec_surfs[i_botlip].type = 0; // 1;
+        mv_rec_surfs[i_botlip].type = 0;
     }
-    mv_rec_surfs[i_aperture].type = 3; // 2;
+    mv_rec_surfs[i_aperture].type = 3;
     // *********************************************
 
     // Assign active surface boolean
@@ -329,6 +329,7 @@ void C_cavity_receiver::meshGeometry()
             }
             else if (type == 1) {
                 // Mesh with triangles: meshHalfNgon method
+                meshHalfNgon(surf, mv_rec_surfs[i].surf_elem_size);
                 throw(C_csp_exception("Triangle mesh method meshHalfNgon not currently supported"));
             }
             else if (type == 2) {
@@ -817,7 +818,7 @@ Eigen::MatrixXd C_cavity_receiver::furthest(const Eigen::MatrixXd cents, const E
 
     Eigen::MatrixXd diff;
     for (size_t i = 0; i < nrows; i++) {
-        diff = cents.row(i).array() - aimpoint.row(0).array();
+        diff = (cents.row(i).array() - aimpoint.row(0).array());
         norm = diff.norm();
         if (norm > max) {
             max = norm;
@@ -1384,6 +1385,87 @@ void C_cavity_receiver::polygon_normal_and_area(const util::matrix_t<double>& po
             area = dotprod3D(nHat_A, toSum) / 2.0;
         }
     }
+}
+
+void C_cavity_receiver::meshHalfNgon(const util::matrix_t<double>& poly, double elemSize) {
+
+    double tol_local = 1.E-7;
+
+    Eigen::MatrixXd E_poly;
+    matrixt_to_eigen(poly, E_poly);
+
+    size_t n_verts = E_poly.rows(); // poly.nrows();
+    size_t n_dims = E_poly.cols();  // poly.ncols();
+
+    size_t divs = 0;
+
+    if (elemSize > 0) {
+
+        double diam = (E_poly.row(0) - E_poly.row(n_verts-1)).norm();
+        divs = round(log(diam / elemSize) / log(2));
+
+        if (divs > 0) {
+
+            // Test for cartesian coordinates
+            if (n_dims == 2) {
+                E_poly.conservativeResize(Eigen::NoChange, 3);
+                E_poly.col(2).setZero();
+                n_dims = E_poly.rows();
+            }
+
+            if (n_dims == 3) {
+
+                if (n_verts < 3) {
+                    throw(C_csp_exception("meshHalfNgon surface must have at least 3 vertices"));
+                }
+                if (n_verts > 3) {
+
+                    // Test for coplanar vertices
+                    Eigen::Vector3d test3 = E_poly.row(1).segment(0,3);
+                    Eigen::MatrixXd n = Eigen::Vector3d(E_poly.row(1).segment(0,3) - E_poly.row(0).segment(0,3)).cross(
+                        Eigen::Vector3d(E_poly.row(2).segment(0,3) - E_poly.row(0).segment(0,3))).transpose();
+
+                    for (size_t i = 3; i < n_verts; i++) {
+
+                        double volume = Eigen::VectorXd(n.row(0)).dot(Eigen::VectorXd(E_poly.row(i)) - Eigen::VectorXd(E_poly.row(0)));
+                        if (std::abs(volume) > tol_local) {
+                            throw(C_csp_exception("meshHalfNgon polygon vertices are not coplanar"));
+                        }
+                    }
+                }
+            }
+            else {
+                throw(C_csp_exception("meshHalfNgon vertices must have 3 dimensions"));
+            }
+        }
+        else {
+            throw(C_csp_exception("meshHalfNgon divs must be > 0"));
+        }
+    }
+    else {
+        throw(C_csp_exception("meshHalfNgon elemsize must be > 0"));
+    }
+
+    size_t nwedges = n_verts - 1;
+    Eigen::MatrixXd origin = (E_poly.row(0) + E_poly.row(n_verts-1)).array()/2.0;
+    size_t nElements = std::pow(4., divs - 1)*nwedges;
+    size_t nNodes = nElements*3;
+
+    Eigen::MatrixXd nodesGlobal;
+    nodesGlobal.setConstant(nNodes, 3, std::numeric_limits<double>::quiet_NaN());
+    nodesGlobal.row(0) = origin;
+
+    for (size_t i = 0; i < n_verts; i++) {
+        nodesGlobal.row(i+1) = E_poly.row(i);
+    }
+
+    Eigen::MatrixXd triangles = Eigen::MatrixXd::Zero(nElements, 3);
+
+    for (size_t i = 0; i < nwedges; i++) {
+        triangles.row(i) << 0, i + 1, i + 2;
+    }
+
+    size_t triCount = nwedges;
 }
 
 void C_cavity_receiver::meshPolygon(const util::matrix_t<double>& poly, double elemSize)
