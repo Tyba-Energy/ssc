@@ -43,11 +43,18 @@ class C_cavity_receiver : public C_pt_receiver
 {
 public:
 
+    enum E_mesh_types
+    {
+        quad,
+        triangle_halfNgon,
+        no_mesh
+    };
+
     class C_rec_surface
     {
     public:
         util::matrix_t<double> vertices;    // (nr, nc) -> (vertex index, dimension [m] (i.e. xyx))
-        size_t type;                // mesh type: 0=triangle, 1=quad, 2=single element
+        E_mesh_types mesh_type;
         bool is_active_surf;        // True: active surface w/ HTF, False: passive surface no HTF
         double eps_sol;             //[-]
         double eps_therm;           //[-]
@@ -55,7 +62,7 @@ public:
 
         C_rec_surface()
         {
-            type = 10;
+            mesh_type = no_mesh;
             is_active_surf = false;
             eps_sol = eps_therm = surf_elem_size = std::numeric_limits<double>::quiet_NaN();
         }

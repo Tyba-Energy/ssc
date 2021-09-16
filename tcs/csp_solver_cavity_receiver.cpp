@@ -112,17 +112,17 @@ void C_cavity_receiver::genOctCavity()
 
     // Assign mesh types
     for (size_t i = 0; i < m_nPanels; i++) {
-        mv_rec_surfs[i].type = 0;   // rectangular elements
+        mv_rec_surfs[i].mesh_type = quad;   // rectangular elements
     }
-    mv_rec_surfs[i_floor].type = 3; // 1; // 3;
-    mv_rec_surfs[i_cover].type = 3; // 1; //
+    mv_rec_surfs[i_floor].mesh_type = no_mesh; // 1; // 3;
+    mv_rec_surfs[i_cover].mesh_type = no_mesh; // 1; //
     if (is_top_lip) {
-        mv_rec_surfs[i_toplip].type = 0;
+        mv_rec_surfs[i_toplip].mesh_type = quad;
     }
     if (is_bot_lip) {
-        mv_rec_surfs[i_botlip].type = 0;
+        mv_rec_surfs[i_botlip].mesh_type = quad;
     }
-    mv_rec_surfs[i_aperture].type = 3;
+    mv_rec_surfs[i_aperture].mesh_type = no_mesh;
     // *********************************************
 
     // Assign active surface boolean
@@ -311,7 +311,7 @@ void C_cavity_receiver::meshGeometry()
     for (size_t i = 0; i < mv_rec_surfs.size(); i++)
     {
         util::matrix_t<double> surf = mv_rec_surfs[i].vertices;
-        size_t type = mv_rec_surfs[i].type;
+        E_mesh_types mesh_type = mv_rec_surfs[i].mesh_type;
 
         util::matrix_t<double> nodes;
         util::matrix_t<int> elems;
@@ -322,28 +322,31 @@ void C_cavity_receiver::meshGeometry()
             v_nodes.push_back(nodes);
         }
         else {
-            if (type == 0) {
+            if (mesh_type == quad) {
                 // Mesh with quads
                 meshMapped(surf, mv_rec_surfs[i].surf_elem_size, nodes, elems);
                 v_nodes.push_back(nodes);
             }
-            else if (type == 1) {
+            else if (mesh_type == triangle_halfNgon) {
                 // Mesh with triangles: meshHalfNgon method
                 meshHalfNgon(surf, mv_rec_surfs[i].surf_elem_size, nodes, elems);
                 v_nodes.push_back(nodes);
             }
-            else if (type == 2) {
-                // Mesh with triangles: meshPolygon method
-                throw(C_csp_exception("Triangle mesh method meshPolygon not currently supported. Need to add qhull project"));
-                meshPolygon(surf, mv_rec_surfs[i].surf_elem_size);
-            }
-            else {
+            //else if (type == 2) {
+            //    // Mesh with triangles: meshPolygon method
+            //    throw(C_csp_exception("Triangle mesh method meshPolygon not currently supported. Need to add qhull project"));
+            //    meshPolygon(surf, mv_rec_surfs[i].surf_elem_size);
+            //}
+            else if (mesh_type == no_mesh) {
                 // Mesh as a single element
                 v_nodes.push_back(surf);
                 elems.resize(1, surf.nrows());
                 for (size_t j = 0; j < surf.nrows(); j++) {
                     elems(0,j) = j;
                 }
+            }
+            else {
+                throw(C_csp_exception("meshGeometry: mesh type not recognized"));
             }
 
             // Shift node IDs to account for previous element sets
